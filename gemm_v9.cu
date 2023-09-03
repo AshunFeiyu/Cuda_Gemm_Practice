@@ -365,7 +365,7 @@ int main(int argc, char** argv) {
     checkCudaErrors(cudaEventCreate(&start));
     checkCudaErrors(cudaEventCreate(&stop));
     float msecTotal = 0;
-    int nIter = 1000;
+    int nIter = 100;
 
 
     checkCudaErrors(cudaEventRecord(start));
