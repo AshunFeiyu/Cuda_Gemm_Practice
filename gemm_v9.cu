@@ -113,35 +113,35 @@ __global__ void gemm(
     if(by==M/BLOCK_SIZE_M)
     {
         int flag=0;
-        if(tx*THREAD_SIZE_X>=BLOCK_SIZE_M_limit)
+        if(ty*THREAD_SIZE_X>=BLOCK_SIZE_M_limit)
         {
-            THREAD_SIZE_X_limit=0;
+            THREAD_SIZE_Y_limit=0;
         }
-        else if((tx+1)*THREAD_SIZE_X<=BLOCK_SIZE_M_limit)
+        else if((ty+1)*THREAD_SIZE_Y<=BLOCK_SIZE_M_limit)
         {
             flag=1;
         }
         else
         {
-            THREAD_SIZE_X_limit=BLOCK_SIZE_M_limit-tx*THREAD_SIZE_X;
+            THREAD_SIZE_Y_limit=BLOCK_SIZE_M_limit-ty*THREAD_SIZE_Y;
             flag=2;
         }
         // if(THREAD_SIZE_X_limit)printf("THREAD_SIZE_X_limit:%d %d %d %d %d %d\n",flag,bx,by,tx,ty,THREAD_SIZE_X_limit);
     }
-    if(bx==N/BLOCK_SIZE_N)
+    if(bx== N/BLOCK_SIZE_N)
     {       
         int flag=0;
-        if(ty*THREAD_SIZE_Y>=BLOCK_SIZE_N_limit)
+        if(tx*THREAD_SIZE_X>=BLOCK_SIZE_N_limit)
         {
-            THREAD_SIZE_Y_limit=0;
+            THREAD_SIZE_X_limit=0;
         }
-        else if((ty+1)*THREAD_SIZE_Y<=BLOCK_SIZE_N_limit)
+        else if((tx+1)*THREAD_SIZE_X<=BLOCK_SIZE_N_limit)
         {
             flag=1;
         }
         else
         {
-            THREAD_SIZE_Y_limit=BLOCK_SIZE_N_limit-ty*THREAD_SIZE_Y;
+            THREAD_SIZE_X_limit=BLOCK_SIZE_N_limit-tx*THREAD_SIZE_X;
             flag=2;
         }
         // if(THREAD_SIZE_Y_limit)printf("THREAD_SIZE_Y_limit:%d %d %d %d %d %d\n",flag,bx,by,tx,ty,THREAD_SIZE_Y_limit);
@@ -290,25 +290,11 @@ __global__ void gemm(
         #pragma unroll
         for (int thread_x = 0; thread_x < THREAD_SIZE_X_limit; ++thread_x) {
             C[OFFSET(
-                BLOCK_SIZE_M * by + ty * THREAD_SIZE_Y_limit + thread_y,
-                BLOCK_SIZE_N * bx + tx * THREAD_SIZE_X_limit + thread_x,
+                BLOCK_SIZE_M * by + ty * THREAD_SIZE_Y + thread_y,
+                BLOCK_SIZE_N * bx + tx * THREAD_SIZE_X + thread_x,
                 N)] =accum[thread_y][thread_x];
-        }
+            }
     }
-    // if(bx==1&&by==0&&tid==0)
-    // {
-    //      #pragma unroll
-    // for (int thread_y = 0; thread_y < THREAD_SIZE_Y_limit; ++thread_y) {
-    //     #pragma unroll
-    //     for (int thread_x = 0; thread_x < THREAD_SIZE_X_limit; ++thread_x) {
-    //         // printf("%d %d %f\n",thread_y,thread_x,C[OFFSET(
-    //         //     BLOCK_SIZE_M * by + ty * THREAD_SIZE_Y + thread_y,
-    //         //     BLOCK_SIZE_N * bx + tx * THREAD_SIZE_X + thread_x,
-    //         //     N)]);
-    //         printf("%d %d %f\n",thread_y,thread_x,accum[thread_y][thread_x]);
-    //     }
-    // }
-    // }
 }
 int main(int argc, char** argv) {
     if (argc != 4) {
@@ -372,16 +358,16 @@ int main(int argc, char** argv) {
     checkCudaErrors(cudaMallocPitch((void**)&d_B_p,&pitch_B,N*sizeof(float),K));
     checkCudaErrors(cudaMallocPitch((void**)&d_C_p,&pitch_C,N*sizeof(float),M));
 
-    cudaMemcpy2D(d_A_p,pitch_A,h_A,K*sizeof(float),K*sizeof(float),M,cudaMemcpyHostToDevice);
-    cudaMemcpy2D(d_B_p,pitch_B,h_B,N*sizeof(float),N*sizeof(float),K,cudaMemcpyHostToDevice);
+    checkCudaErrors(cudaMemcpy2D(d_A_p,pitch_A,h_A,K*sizeof(float),K*sizeof(float),M,cudaMemcpyHostToDevice));
+    checkCudaErrors(cudaMemcpy2D(d_B_p,pitch_B,h_B,N*sizeof(float),N*sizeof(float),K,cudaMemcpyHostToDevice));
 
     cudaEvent_t start, stop;
     checkCudaErrors(cudaEventCreate(&start));
     checkCudaErrors(cudaEventCreate(&stop));
     float msecTotal = 0;
-    int nIter = 1;
+    int nIter = 1000;
 
-    checkCudaErrors(cudaMemcpy( d_C, h_C, bytes_C, cudaMemcpyHostToDevice));
+
     checkCudaErrors(cudaEventRecord(start));
     for (int run = 0 ; run < nIter; run ++ ) {
         dim3 dimBlock(BLOCK_SIZE_N / THREAD_SIZE_X, BLOCK_SIZE_M / THREAD_SIZE_Y);
@@ -396,6 +382,8 @@ int main(int argc, char** argv) {
 
 
     checkCudaErrors(cudaMemcpy( h_C, d_C, bytes_C, cudaMemcpyDeviceToHost));
+
+    // checkCudaErrors(cudaMemcpy2D(h_C,N*sizeof(float),d_C_p,pitch_C,pitch_C,M,cudaMemcpyDeviceToHost));
 
     msecPerMatrixMul[0] = msecTotal / nIter;
     gigaFlops[0] = (flopsPerMatrixMul * 1.0e-9f) / (msecPerMatrixMul[0] / 1000.0f);
@@ -433,6 +421,7 @@ int main(int argc, char** argv) {
     
     double eps = 1.e-6;  // machine zero
     bool correct = true;
+
     for (int i = 0; i < M * N; i++) {
         int row = i / N;
         int col = i % N;
@@ -441,20 +430,15 @@ int main(int argc, char** argv) {
         double abs_val = fabs(h_C[i]);
         double rel_err = abs_err / abs_val / dot_length;
         if (rel_err > eps) {
-            printf("Error! Matrix[%05d]=%.8f, ref=%.8f error term is > %E\n",
-                    i, h_C[i], h_C1[i], eps);
+            printf("Error! row=%d,col=%d,Matrix[%05d]=%.8f, ref=%.8f error term is > %E\n",
+                    row,col,i, h_C[i], h_C1[i], eps);
             correct = false;
-            // break;
+            break;
         }
     }
 
     printf("%s\n", correct ? "Result= PASS" : "Result= FAIL");
     printf("ratio= %f\n", gigaFlops[0] / gigaFlops[1]);
-    
-    // printf("%f %f\n",h_C[2],h_C1[2*N]);
-
-    // printf("%s\n", correct ? "Result= PASS" : "Result= FAIL");
-    // printf("ratio= %f\n", gigaFlops[0] / gigaFlops[1]);
 
     // Free Memory
     cudaFree(d_A);
