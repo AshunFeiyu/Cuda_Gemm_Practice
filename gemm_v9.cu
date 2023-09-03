@@ -112,39 +112,31 @@ __global__ void gemm(
     int THREAD_SIZE_X_limit=THREAD_SIZE_X;
     if(by==M/BLOCK_SIZE_M)
     {
-        int flag=0;
         if(ty*THREAD_SIZE_X>=BLOCK_SIZE_M_limit)
         {
             THREAD_SIZE_Y_limit=0;
         }
         else if((ty+1)*THREAD_SIZE_Y<=BLOCK_SIZE_M_limit)
         {
-            flag=1;
         }
         else
         {
             THREAD_SIZE_Y_limit=BLOCK_SIZE_M_limit-ty*THREAD_SIZE_Y;
-            flag=2;
         }
-        // if(THREAD_SIZE_X_limit)printf("THREAD_SIZE_X_limit:%d %d %d %d %d %d\n",flag,bx,by,tx,ty,THREAD_SIZE_X_limit);
     }
     if(bx== N/BLOCK_SIZE_N)
     {       
-        int flag=0;
         if(tx*THREAD_SIZE_X>=BLOCK_SIZE_N_limit)
         {
             THREAD_SIZE_X_limit=0;
         }
         else if((tx+1)*THREAD_SIZE_X<=BLOCK_SIZE_N_limit)
         {
-            flag=1;
         }
         else
         {
             THREAD_SIZE_X_limit=BLOCK_SIZE_N_limit-tx*THREAD_SIZE_X;
-            flag=2;
         }
-        // if(THREAD_SIZE_Y_limit)printf("THREAD_SIZE_Y_limit:%d %d %d %d %d %d\n",flag,bx,by,tx,ty,THREAD_SIZE_Y_limit);
     }
 
     int limitK=BLOCK_SIZE_K;
@@ -365,7 +357,7 @@ int main(int argc, char** argv) {
     checkCudaErrors(cudaEventCreate(&start));
     checkCudaErrors(cudaEventCreate(&stop));
     float msecTotal = 0;
-    int nIter = 100;
+    int nIter = 1000;
 
 
     checkCudaErrors(cudaEventRecord(start));
