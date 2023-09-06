@@ -139,35 +139,27 @@ __global__ void gemm(
         }
     }
 
-
     A=ADDR(A,pitch_A,by*BLOCK_SIZE_M,0);
     B=ADDR(B,pitch_B,0,bx*BLOCK_SIZE_N);  
 
     //transfer first tile from global mem to shared mem
     // load A from global memory to shared memory
-    #pragma unroll
-    for ( int i = 0 ; i < BLOCK_SIZE_M ; i += A_TILE_ROW_STRIDE) {
-        int ldg_index = i / A_TILE_ROW_STRIDE * 4;
-        FETCH_FLOAT4(ldg_a_reg[ldg_index]) = FETCH_FLOAT4(*ADDR(
-            A,
-            pitch_A,
-            A_TILE_ROW_START + i,
-            A_TILE_COL));
-        As[0][A_TILE_COL][A_TILE_ROW_START + i]=ldg_a_reg[ldg_index];
-        As[0][A_TILE_COL+1][A_TILE_ROW_START + i]=ldg_a_reg[ldg_index+1];
-        As[0][A_TILE_COL+2][A_TILE_ROW_START + i]=ldg_a_reg[ldg_index+2];
-        As[0][A_TILE_COL+3][A_TILE_ROW_START + i]=ldg_a_reg[ldg_index+3];
-    }
-    // load B from global memory to shared memory
-    #pragma unroll
-    for ( int i = 0 ; i < BLOCK_SIZE_K; i += B_TILE_ROW_STRIDE) {
-        
-        FETCH_FLOAT4(Bs[0][B_TILE_ROW_START + i][B_TILE_COL]) = FETCH_FLOAT4(*ADDR(
-            B,
-            pitch_B,
-            B_TILE_ROW_START + i,
-            B_TILE_COL));
-    }
+    FETCH_FLOAT4(ldg_a_reg[0]) = FETCH_FLOAT4(*ADDR(
+        A,
+        pitch_A,
+        A_TILE_ROW_START,
+        A_TILE_COL));
+    As[0][A_TILE_COL][A_TILE_ROW_START]=ldg_a_reg[0];
+    As[0][A_TILE_COL+1][A_TILE_ROW_START]=ldg_a_reg[1];
+    As[0][A_TILE_COL+2][A_TILE_ROW_START]=ldg_a_reg[2];
+    As[0][A_TILE_COL+3][A_TILE_ROW_START]=ldg_a_reg[3];
+    
+    // load B from global memory to shared memory  
+    FETCH_FLOAT4(Bs[0][B_TILE_ROW_START][B_TILE_COL]) = FETCH_FLOAT4(*ADDR(
+        B,
+        pitch_B,
+        B_TILE_ROW_START,
+        B_TILE_COL));
         
     __syncthreads();
     // load A from shared memory to register
@@ -186,26 +178,19 @@ __global__ void gemm(
 
     for(int tile_idx=BLOCK_SIZE_K;tile_idx<K;tile_idx += BLOCK_SIZE_K){
         // load next tile from global mem
-        #pragma unroll
-        for ( int i = 0 ; i < BLOCK_SIZE_M ; i += A_TILE_ROW_STRIDE) {
-            int ldg_index = i / A_TILE_ROW_STRIDE * 4;
-            if(A_TILE_ROW_START + i<M)
-                FETCH_FLOAT4(ldg_a_reg[ldg_index]) = FETCH_FLOAT4(*ADDR(
-                    A,
-                    pitch_A,
-                    A_TILE_ROW_START + i,
-                    A_TILE_COL + tile_idx));
-                } 
-        #pragma unroll
-        for ( int i = 0 ; i < BLOCK_SIZE_K; i += B_TILE_ROW_STRIDE) {
-            int ldg_index = i / B_TILE_ROW_STRIDE * 4;
-            if(tile_idx + B_TILE_ROW_START + i<K)
-                FETCH_FLOAT4(ldg_b_reg[ldg_index]) = FETCH_FLOAT4(*ADDR(
-                    B,
-                    pitch_B,
-                    tile_idx + B_TILE_ROW_START + i,
-                    B_TILE_COL));
-            }               
+        if(A_TILE_ROW_START<M)
+            FETCH_FLOAT4(ldg_a_reg[0]) = FETCH_FLOAT4(*ADDR(
+                A,
+                pitch_A,
+                A_TILE_ROW_START,
+                A_TILE_COL + tile_idx));
+        if(tile_idx + B_TILE_ROW_START<K)        
+            FETCH_FLOAT4(ldg_b_reg[0]) = FETCH_FLOAT4(*ADDR(
+                B,
+                pitch_B,
+                tile_idx + B_TILE_ROW_START,
+                B_TILE_COL));
+                          
 
         load_stage_idx = write_stage_idx ^ 1;
 
@@ -225,28 +210,23 @@ __global__ void gemm(
             }
             // compute C THREAD_SIZE_X x THREAD_SIZE_Y
             #pragma unroll
-            for (int thread_y = 0; thread_y < THREAD_SIZE_Y_limit; ++thread_y) {
+            for (int thread_y = 0; thread_y < THREAD_SIZE_Y; ++thread_y) {
                 #pragma unroll
-                for (int thread_x = 0; thread_x < THREAD_SIZE_X_limit; ++thread_x) {
+                for (int thread_x = 0; thread_x < THREAD_SIZE_X; ++thread_x) {
                     accum[thread_y][thread_x] += frag_a[j%2][thread_y] * frag_b[j%2][thread_x];
                 }
             }
         }
 
-        #pragma unroll
-        for ( int i = 0 ; i < BLOCK_SIZE_M ; i += A_TILE_ROW_STRIDE) {
-            int ldg_index = i / A_TILE_ROW_STRIDE * 4;
-            As[write_stage_idx][A_TILE_COL][A_TILE_ROW_START + i]=ldg_a_reg[ldg_index];
-            As[write_stage_idx][A_TILE_COL+1][A_TILE_ROW_START + i]=ldg_a_reg[ldg_index+1];
-            As[write_stage_idx][A_TILE_COL+2][A_TILE_ROW_START + i]=ldg_a_reg[ldg_index+2];
-            As[write_stage_idx][A_TILE_COL+3][A_TILE_ROW_START + i]=ldg_a_reg[ldg_index+3];
-        }
+        // load A from global memory to shared memory
+        As[write_stage_idx][A_TILE_COL][A_TILE_ROW_START]=ldg_a_reg[0];
+        As[write_stage_idx][A_TILE_COL+1][A_TILE_ROW_START]=ldg_a_reg[1];
+        As[write_stage_idx][A_TILE_COL+2][A_TILE_ROW_START]=ldg_a_reg[2];
+        As[write_stage_idx][A_TILE_COL+3][A_TILE_ROW_START]=ldg_a_reg[3];
+
         // load B from global memory to shared memory
-        #pragma unroll
-        for ( int i = 0 ; i < BLOCK_SIZE_K; i += B_TILE_ROW_STRIDE) {
-            int ldg_index = i / B_TILE_ROW_STRIDE * 4;
-            FETCH_FLOAT4(Bs[write_stage_idx][B_TILE_ROW_START + i][B_TILE_COL]) = FETCH_FLOAT4(ldg_b_reg[ldg_index]);
-        }
+        FETCH_FLOAT4(Bs[write_stage_idx][B_TILE_ROW_START][B_TILE_COL]) = FETCH_FLOAT4(ldg_b_reg[0]);
+
         // use double buffer, only need one sync
         __syncthreads();
         // switch
@@ -265,9 +245,9 @@ __global__ void gemm(
         }
         //compute last tile mma THREAD_SIZE_X x THREAD_SIZE_Y
         #pragma unroll
-        for (int thread_y = 0; thread_y < THREAD_SIZE_Y_limit; ++thread_y) {
+        for (int thread_y = 0; thread_y < THREAD_SIZE_Y; ++thread_y) {
             #pragma unroll
-            for (int thread_x = 0; thread_x < THREAD_SIZE_X_limit; ++thread_x) {
+            for (int thread_x = 0; thread_x < THREAD_SIZE_X; ++thread_x) {
                 accum[thread_y][thread_x] += frag_a[(BLOCK_SIZE_K+1)%2][thread_y] * frag_b[(BLOCK_SIZE_K+1)%2][thread_x];
             }
         }    
@@ -394,7 +374,7 @@ int main(int argc, char** argv) {
     checkCudaErrors(cudaEventCreate(&start));
     checkCudaErrors(cudaEventCreate(&stop));
     float msecTotal = 0;
-    int nIter = 1;
+    int nIter = 1000;
 
 
     checkCudaErrors(cudaEventRecord(start));
