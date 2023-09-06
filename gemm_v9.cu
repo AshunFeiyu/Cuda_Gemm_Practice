@@ -139,6 +139,9 @@ __global__ void gemm(
         }
     }
 
+    // int limitK=8;    
+    int limitK=K%BLOCK_SIZE_K?K%BLOCK_SIZE_K:BLOCK_SIZE_K;
+
     A=ADDR(A,pitch_A,by*BLOCK_SIZE_M,0);
     B=ADDR(B,pitch_B,0,bx*BLOCK_SIZE_N);  
 
@@ -255,8 +258,6 @@ __global__ void gemm(
 
 
     load_stage_idx = write_stage_idx ^ 1;
-
-    int limitK=K%BLOCK_SIZE_K?K%BLOCK_SIZE_K:BLOCK_SIZE_K;
 
     #pragma unroll
     for(int j=0; j<limitK-1; ++j){
