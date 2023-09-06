@@ -191,20 +191,22 @@ __global__ void gemm(
             #pragma unroll
             for ( int i = 0 ; i < BLOCK_SIZE_M ; i += A_TILE_ROW_STRIDE) {
                 int ldg_index = i / A_TILE_ROW_STRIDE * 4;
-                FETCH_FLOAT4(ldg_a_reg[ldg_index]) = FETCH_FLOAT4(*ADDR(
-                    A,
-                    pitch_A,
-                    A_TILE_ROW_START + i,
-                    A_TILE_COL + tile_idx));
+                if(A_TILE_ROW_START + i<M)
+                    FETCH_FLOAT4(ldg_a_reg[ldg_index]) = FETCH_FLOAT4(*ADDR(
+                        A,
+                        pitch_A,
+                        A_TILE_ROW_START + i,
+                        A_TILE_COL + tile_idx));
                     } 
             #pragma unroll
             for ( int i = 0 ; i < BLOCK_SIZE_K; i += B_TILE_ROW_STRIDE) {
                 int ldg_index = i / B_TILE_ROW_STRIDE * 4;
-                FETCH_FLOAT4(ldg_b_reg[ldg_index]) = FETCH_FLOAT4(*ADDR(
-                    B,
-                    pitch_B,
-                    tile_idx + B_TILE_ROW_START + i,
-                    B_TILE_COL));
+                if(tile_idx + B_TILE_ROW_START + i<K)
+                    FETCH_FLOAT4(ldg_b_reg[ldg_index]) = FETCH_FLOAT4(*ADDR(
+                        B,
+                        pitch_B,
+                        tile_idx + B_TILE_ROW_START + i,
+                        B_TILE_COL));
                 }               
         }
 
