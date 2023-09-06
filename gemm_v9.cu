@@ -183,9 +183,8 @@ __global__ void gemm(
     }
 
     int write_stage_idx = 1;
-    int tile_idx = 0;
-    do{
-        tile_idx += BLOCK_SIZE_K;
+    for(int tile_idx=BLOCK_SIZE_K;tile_idx<K+BLOCK_SIZE_K;tile_idx += BLOCK_SIZE_K)
+    {
         // load next tile from global mem
         if(tile_idx< K){
             #pragma unroll
@@ -259,48 +258,25 @@ __global__ void gemm(
 
         // load first tile from shared mem to register of next iter
         // load A from shared memory to register
-        if(limitK%2)
-        {
-            #pragma unroll
-            for (int thread_y = 0; thread_y < THREAD_SIZE_Y; thread_y += 4) {
-                FETCH_FLOAT4(frag_a[1][thread_y]) = FETCH_FLOAT4(As[load_stage_idx^1][0][THREAD_SIZE_Y * ty + thread_y]);
-            }
-            // load B from shared memory to register
-            #pragma unroll
-            for (int thread_x = 0; thread_x < THREAD_SIZE_X; thread_x += 4) {
-                FETCH_FLOAT4(frag_b[1][thread_x]) = FETCH_FLOAT4(Bs[load_stage_idx^1][0][THREAD_SIZE_X * tx + thread_x]);
-            }
-            //compute last tile mma THREAD_SIZE_X x THREAD_SIZE_Y
-            #pragma unroll
-            for (int thread_y = 0; thread_y < THREAD_SIZE_Y_limit; ++thread_y) {
-                #pragma unroll
-                for (int thread_x = 0; thread_x < THREAD_SIZE_X_limit; ++thread_x) {
-                    accum[thread_y][thread_x] += frag_a[0][thread_y] * frag_b[0][thread_x];
-                }
-            }
+        #pragma unroll
+        for (int thread_y = 0; thread_y < THREAD_SIZE_Y; thread_y += 4) {
+            FETCH_FLOAT4(frag_a[limitK%2][thread_y]) = FETCH_FLOAT4(As[load_stage_idx^1][0][THREAD_SIZE_Y * ty + thread_y]);
         }
-        else
-        {
+        // load B from shared memory to register
+        #pragma unroll
+        for (int thread_x = 0; thread_x < THREAD_SIZE_X; thread_x += 4) {
+            FETCH_FLOAT4(frag_b[limitK%2][thread_x]) = FETCH_FLOAT4(Bs[load_stage_idx^1][0][THREAD_SIZE_X * tx + thread_x]);
+        }
+        //compute last tile mma THREAD_SIZE_X x THREAD_SIZE_Y
+        #pragma unroll
+        for (int thread_y = 0; thread_y < THREAD_SIZE_Y_limit; ++thread_y) {
             #pragma unroll
-            for (int thread_y = 0; thread_y < THREAD_SIZE_Y; thread_y += 4) {
-                FETCH_FLOAT4(frag_a[0][thread_y]) = FETCH_FLOAT4(As[load_stage_idx^1][0][THREAD_SIZE_Y * ty + thread_y]);
-            }
-            // load B from shared memory to register
-            #pragma unroll
-            for (int thread_x = 0; thread_x < THREAD_SIZE_X; thread_x += 4) {
-                FETCH_FLOAT4(frag_b[0][thread_x]) = FETCH_FLOAT4(Bs[load_stage_idx^1][0][THREAD_SIZE_X * tx + thread_x]);
-            }
-            //compute last tile mma THREAD_SIZE_X x THREAD_SIZE_Y
-            #pragma unroll
-            for (int thread_y = 0; thread_y < THREAD_SIZE_Y_limit; ++thread_y) {
-                #pragma unroll
-                for (int thread_x = 0; thread_x < THREAD_SIZE_X_limit; ++thread_x) {
-                    accum[thread_y][thread_x] += frag_a[1][thread_y] * frag_b[1][thread_x];
-                }
+            for (int thread_x = 0; thread_x < THREAD_SIZE_X_limit; ++thread_x) {
+                accum[thread_y][thread_x] += frag_a[(limitK+1)%2][thread_y] * frag_b[(limitK+1)%2][thread_x];
             }
         }
        
-    }while(tile_idx< K);
+    }
 
     // store back to C
     #pragma unroll
