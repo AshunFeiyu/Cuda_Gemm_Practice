@@ -116,10 +116,7 @@ __global__ void gemm(
         {
             THREAD_SIZE_Y_limit=0;
         }
-        else if((ty+1)*THREAD_SIZE_Y<=BLOCK_SIZE_M_limit)
-        {
-        }
-        else
+        else if((ty+1)*THREAD_SIZE_Y>BLOCK_SIZE_M_limit)
         {
             THREAD_SIZE_Y_limit=BLOCK_SIZE_M_limit-ty*THREAD_SIZE_Y;
         }
@@ -130,10 +127,7 @@ __global__ void gemm(
         {
             THREAD_SIZE_X_limit=0;
         }
-        else if((tx+1)*THREAD_SIZE_X<=BLOCK_SIZE_N_limit)
-        {
-        }
-        else
+        else if((tx+1)*THREAD_SIZE_X>BLOCK_SIZE_N_limit)
         {
             THREAD_SIZE_X_limit=BLOCK_SIZE_N_limit-tx*THREAD_SIZE_X;
         }
