@@ -1,0 +1,1 @@
+/usr/bin/g++ @CMakeFiles/gemm_v4.out.dir/objects1.rsp CMakeFiles/gemm_v4.out.dir/cmake_device_link.o -o gemm_v4.out @CMakeFiles/gemm_v4.out.dir/linkLibs.rsp -L"/usr/local/cuda-11.6/targets/x86_64-linux/lib/stubs" -L"/usr/local/cuda-11.6/targets/x86_64-linux/lib"
