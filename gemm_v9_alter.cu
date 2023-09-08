@@ -133,9 +133,6 @@ __global__ void gemm(
         }
     }
 
-    int limitK=8;    
-    // int limitK=K%BLOCK_SIZE_K?K%BLOCK_SIZE_K:BLOCK_SIZE_K;
-
     A=ADDR(A,pitch_A,by*BLOCK_SIZE_M,0);
     B=ADDR(B,pitch_B,0,bx*BLOCK_SIZE_N);  
 
@@ -155,13 +152,13 @@ __global__ void gemm(
     }
     
     
-    // load B from global memory to shared memory 
-    if(B_TILE_ROW_START<K)   
-        FETCH_FLOAT4(Bs[0][B_TILE_ROW_START][B_TILE_COL]) = FETCH_FLOAT4(*ADDR(
-            B,
-            pitch_B,
-            B_TILE_ROW_START,
-            B_TILE_COL));
+    // load B from global memory to shared memory  
+    if(B_TILE_ROW_START<K)
+    FETCH_FLOAT4(Bs[0][B_TILE_ROW_START][B_TILE_COL]) = FETCH_FLOAT4(*ADDR(
+        B,
+        pitch_B,
+        B_TILE_ROW_START,
+        B_TILE_COL));
         
     __syncthreads();
     // load A from shared memory to register
@@ -259,7 +256,7 @@ __global__ void gemm(
     load_stage_idx = write_stage_idx ^ 1;
 
     #pragma unroll
-    for(int j=0; j<limitK-1; ++j){
+    for(int j=0; j<7; ++j){
     // load next tile from shared mem to register 
     // load A from shared memory to register
         #pragma unroll
@@ -273,10 +270,11 @@ __global__ void gemm(
         }
         // compute C THREAD_SIZE_X x THREAD_SIZE_Y
         #pragma unroll
-        for (int thread_y = 0; thread_y < THREAD_SIZE_Y_limit; ++thread_y) {
+        for (int thread_y = 0; thread_y < THREAD_SIZE_Y; ++thread_y) {
             #pragma unroll
-            for (int thread_x = 0; thread_x < THREAD_SIZE_X_limit; ++thread_x) {
-                accum[thread_y][thread_x] += frag_a[j%2][thread_y] * frag_b[j%2][thread_x];
+            for (int thread_x = 0; thread_x < THREAD_SIZE_X; ++thread_x) {
+                if(thread_y<THREAD_SIZE_Y_limit&&thread_x<THREAD_SIZE_X_limit)
+                    accum[thread_y][thread_x] += frag_a[j%2][thread_y] * frag_b[j%2][thread_x];
             }
         }
     }
@@ -285,22 +283,24 @@ __global__ void gemm(
 
     //compute last tile mma THREAD_SIZE_X x THREAD_SIZE_Y
     #pragma unroll
-    for (int thread_y = 0; thread_y < THREAD_SIZE_Y_limit; ++thread_y) {
+    for (int thread_y = 0; thread_y < THREAD_SIZE_Y; ++thread_y) {
         #pragma unroll
-        for (int thread_x = 0; thread_x < THREAD_SIZE_X_limit; ++thread_x) {
-            accum[thread_y][thread_x] += frag_a[(limitK+1)%2][thread_y] * frag_b[(limitK+1)%2][thread_x];
+        for (int thread_x = 0; thread_x < THREAD_SIZE_X; ++thread_x) {
+            if(thread_y<THREAD_SIZE_Y_limit&&thread_x<THREAD_SIZE_X_limit)
+                accum[thread_y][thread_x] += frag_a[1][thread_y] * frag_b[1][thread_x];
         }
     }
 
     // store back to C
     #pragma unroll
-    for (int thread_y = 0; thread_y < THREAD_SIZE_Y_limit; ++thread_y) {
+    for (int thread_y = 0; thread_y < THREAD_SIZE_Y; ++thread_y) {
         #pragma unroll
-        for (int thread_x = 0; thread_x < THREAD_SIZE_X_limit; ++thread_x) {
-            C[OFFSET(
-                BLOCK_SIZE_M * by + ty * THREAD_SIZE_Y + thread_y,
-                BLOCK_SIZE_N * bx + tx * THREAD_SIZE_X + thread_x,
-                N)] =accum[thread_y][thread_x];
+        for (int thread_x = 0; thread_x < THREAD_SIZE_X; ++thread_x) {
+            if(thread_y<THREAD_SIZE_Y_limit&&thread_x<THREAD_SIZE_X_limit)
+                C[OFFSET(
+                    BLOCK_SIZE_M * by + ty * THREAD_SIZE_Y + thread_y,
+                    BLOCK_SIZE_N * bx + tx * THREAD_SIZE_X + thread_x,
+                    N)] =accum[thread_y][thread_x];
             }
     }
 }
